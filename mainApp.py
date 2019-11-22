@@ -12,6 +12,7 @@ import config
 MSG_PAUSE = 'pause'
 MSG_RESUME = 'resume'
 MSG_STOP = 'stop'
+MSG_FINISHED = 'finished'
 
 class batchDetectionThread(QtCore.QThread):
     '''
@@ -28,42 +29,56 @@ class batchDetectionThread(QtCore.QThread):
         # 暂停、恢复
         self.sync = QtCore.QMutex()
         self.pauseCond = QtCore.QWaitCondition()
+        self.stopCond = QtCore.QWaitCondition()
         self.isPause = False  
         self.isStop = False
 
-        # 将主窗口实例的信号与线程关联
+        
+        # 与主进程的通信
         w.batchDetectionSignal.connect(self.detectionSignal)
 
     def detectionSignal(self,s):
-        if s.upper() == 'PAUSE':            
+        print('receiving signal:{}'.format(s))
+        if s == MSG_PAUSE:            
             self.pause()
-        elif s.upper() == 'RESUME':            
+        elif s == MSG_RESUME:            
             self.resume()
-        elif s.upper() == 'STOP':
+        elif s == MSG_STOP:
             self.stop()
 
     def resume(self):
         self.sync.lock()
         self.isPause = False
+        self.isStop = False
         self.sync.unlock()
         self.pauseCond.wakeAll()
 
     def pause(self):
         self.sync.lock()
         self.isPause = True
+        self.isStop = False
         self.sync.unlock()        
 
     def stop(self):
+        print('in stop func in thread')
         self.sync.lock()
+        self.isPause = False
         self.isStop = True
         self.sync.unlock() 
 
     def run(self):        
         for root, dirs, files in os.walk(self.inputRootImagePath):
             for fileName in files:
-                self.sync.lock()                
+                self.sync.lock()
+                if self.isStop:
+                    print('stop it')
+                    self.stopCond.wait(self.sync)
+                    break
+                self.sync.unlock()
+
+                self.sync.lock()          
                 if self.isPause:
-                    self.pauseCond.wait(self.sync)                
+                    self.pauseCond.wait(self.sync)
                 self.sync.unlock()
 
                 if fileName[fileName.rfind('.'):].upper() == '.JPG':                   
@@ -71,7 +86,12 @@ class batchDetectionThread(QtCore.QThread):
                     fileNameWithFullPath = os.path.join(root, fileName)
                     print(fileNameWithFullPath)
                     # 处理完一张，发送消息更新进度条和界面
-                    self.change_progress.emit(1, fileNameWithFullPath)                       
+                    self.change_progress.emit(1, fileNameWithFullPath)  
+            else:
+                continue
+            break      
+        #完成批量检测
+        self.change_progress.emit(1, MSG_FINISHED)     
 
 
 class ObjectDetectionMainWindow(QMainWindow):  
@@ -125,7 +145,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             恢复界面原始状态
         '''
         self.batchStart = False
-        self.progressBar.setValue(0)
+        self.progressBar.reset()
 
     def showOrHideLog(self):        
         # 日志窗口
@@ -188,7 +208,7 @@ class ObjectDetectionMainWindow(QMainWindow):
                 t = batchDetectionThread(self,inputRootImagePath=inputRootImagePath)
                 t.change_progress.connect(self.changeProgress)
                 t.start()  
-
+               
         elif config.DetectionMode == 2 :   #加载检测结果
             self.ui.actionStart.setEnabled(False)
             self.ui.actionPause.setEnabled(False)
@@ -202,8 +222,19 @@ class ObjectDetectionMainWindow(QMainWindow):
 
     def changeProgress(self, i, s):
         # 处理从线程收到的信号
-        self.progressBar.setValue(self.progressBar.value() + i)
-        self.ui.plainTextEditLog.appendPlainText(s)
+        if s == MSG_FINISHED: #完成检测，更新界面状态
+            self.ui.actionStart.setEnabled(True)
+            self.ui.actionPause.setEnabled(False)
+            self.ui.actionStop.setEnabled(False)
+            self.ui.actionNext.setEnabled(False)
+            self.ui.actionPrev.setEnabled(False)
+            self.ui.actionRedo.setEnabled(False)
+            self.ui.actionImageAdjust.setEnabled(False)
+
+            self.restoreUI()
+        else:
+            self.progressBar.setValue(self.progressBar.value() + i)
+            self.ui.plainTextEditLog.appendPlainText(s)
         
 
 
@@ -247,9 +278,12 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionRedo.setEnabled(False)
             self.ui.actionImageAdjust.setEnabled(False)
 
+            # 向批量检测进程发送stop信号
+            print('sending stop signal...')
+            self.restoreUI()
             self.batchDetectionSignal.emit(MSG_STOP)
 
-            self.restoreUI()
+            
             
         else:  #加载检测结果
             pass      
