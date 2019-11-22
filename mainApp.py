@@ -71,13 +71,14 @@ class batchDetectionThread(QtCore.QThread):
             for fileName in files:
                 self.sync.lock()
                 if self.isStop:
-                    print('stop it')
+                    print('stopped')
                     self.stopCond.wait(self.sync)
                     break
                 self.sync.unlock()
 
                 self.sync.lock()          
                 if self.isPause:
+                    print('pausing ...')
                     self.pauseCond.wait(self.sync)
                 self.sync.unlock()
 
@@ -110,6 +111,8 @@ class ObjectDetectionMainWindow(QMainWindow):
 
         # 批量检测标志(True标识已经开始批量检测，开始按钮不是第一次点击)
         self.batchStart = False
+        # 是否批量检测中
+        self.batchDetInRunning = False 
                 
 
         self.setUI()
@@ -127,7 +130,8 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.actionPrev.setEnabled(False)
         self.ui.actionRedo.setEnabled(False)
         self.ui.actionImageAdjust.setEnabled(False)
-        # 隐藏日志窗口
+        # 隐藏日志窗口        
+        self.ui.dockWidgetLog.setMinimumSize(400,200)
         self.ui.dockWidgetLog.setVisible(False)
         # 状态栏
         self.ui.statusbar.showMessage('准备就绪。')        
@@ -137,14 +141,45 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.actionStart.triggered.connect(self.startDetection)
         self.ui.actionPause.triggered.connect(self.pauseDetection)
         self.ui.actionStop.triggered.connect(self.stopDetection)
-        self.ui.actionNext.triggered.connect(self.nextImage)
-        self.ui.actionExit.triggered.connect(self.exit)
+        self.ui.actionNext.triggered.connect(self.nextImage)  
+        # 调用系统的close事件(执行的是closeEvent)
+        self.ui.actionExit.triggered.connect(self.close)
+
+    def closeEvent(self, event):
+        # 重写主窗口的close事件，加入关闭逻辑
+        if self.batchDetInRunning:  #批量检测进程运行中
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Question)
+            msgBox.setText("正在检测中，退出将终止现有检测，是否继续退出？")
+            msgBox.setWindowTitle(config.MainWindowTitle)
+            yesButton = msgBox.addButton('是', QMessageBox.YesRole)
+            msgBox.addButton('否',QMessageBox.NoRole)          
+            
+            msgBox.exec()
+            if msgBox.clickedButton() == yesButton:
+                event.accept()
+            else:
+                event.ignore()
+        else:       
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Question)
+            msgBox.setText("是否要退出程序？")
+            msgBox.setWindowTitle(config.MainWindowTitle)
+            yesButton = msgBox.addButton('是', QMessageBox.YesRole)
+            msgBox.addButton('否',QMessageBox.NoRole)          
+            
+            msgBox.exec()
+            if msgBox.clickedButton() == yesButton:
+                event.accept()
+            else:
+                event.ignore()
 
     def restoreUI(self):
         ''' 
             恢复界面原始状态
         '''
         self.batchStart = False
+        self.batchDetInRunning = False
         self.progressBar.reset()
 
     def showOrHideLog(self):        
@@ -158,7 +193,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             win_width = self.geometry().width()
             self.ui.dockWidgetLog.setGeometry(
                         win_x + win_width - self.ui.dockWidgetLog.geometry().width(), 
-                        win_y + 250, 
+                        win_y + 250,                         
                         self.ui.dockWidgetLog.geometry().width(),
                         self.ui.dockWidgetLog.geometry().height()
                     )            
@@ -186,6 +221,8 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionPrev.setEnabled(False)
             self.ui.actionRedo.setEnabled(False)
             self.ui.actionImageAdjust.setEnabled(False)
+
+            self.batchDetInRunning = True
 
             if self.batchStart: #不是第一次点击，发送resume信号
                 # 发送继续信号
@@ -292,11 +329,7 @@ class ObjectDetectionMainWindow(QMainWindow):
 
     def nextImage(self):  
         pass
-
-    def exit(self):
-        pass
-
-        
+ 
 
         
 

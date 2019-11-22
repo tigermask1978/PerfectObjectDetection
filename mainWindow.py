@@ -42,7 +42,6 @@ class Ui_MainWindow(object):
         self.gridLayout.setRowStretch(2, 2)
         self.gridLayout_2.addLayout(self.gridLayout, 0, 0, 1, 1)
         self.dockWidgetLog = QtWidgets.QDockWidget(self.centralwidget)
-        self.dockWidgetLog.setMinimumSize(QtCore.QSize(600, 400))
         self.dockWidgetLog.setFloating(True)
         self.dockWidgetLog.setFeatures(QtWidgets.QDockWidget.AllDockWidgetFeatures)
         self.dockWidgetLog.setObjectName("dockWidgetLog")
