@@ -6,6 +6,7 @@ from PyQt5.QtGui import *
 from PyQt5 import QtCore
 
 from mainWindow import *
+from configureWindow import *
 import config
 
 # 批量检测发送信号消息
@@ -94,6 +95,21 @@ class batchDetectionThread(QtCore.QThread):
         #完成批量检测
         self.change_progress.emit(1, MSG_FINISHED)     
 
+class ConfigureWindow(QDialog):
+    def __init__(self):
+        super().__init__()
+
+        self.ui = Ui_DialogConfig()
+        self.ui.setupUi(self)
+
+        self.initWindow()
+
+    def initWindow(self):
+        self.setWindowModality(QtCore.Qt.ApplicationModal)
+        
+
+        
+
 
 class ObjectDetectionMainWindow(QMainWindow):  
     
@@ -137,6 +153,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.statusbar.showMessage('准备就绪。')        
 
         # Actions
+        self.ui.actionSetup.triggered.connect(self.configure)
         self.ui.actionDisplayLog.triggered.connect(self.showOrHideLog)
         self.ui.actionStart.triggered.connect(self.startDetection)
         self.ui.actionPause.triggered.connect(self.pauseDetection)
@@ -152,7 +169,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             msgBox.setIcon(QMessageBox.Question)
             msgBox.setText("正在检测中，退出将终止现有检测，是否继续退出？")
             msgBox.setWindowTitle(config.MainWindowTitle)
-            yesButton = msgBox.addButton('是', QMessageBox.YesRole)
+            yesButton = msgBox.addButton('是', QMessageBox.YesRole)            
             msgBox.addButton('否',QMessageBox.NoRole)          
             
             msgBox.exec()
@@ -182,7 +199,18 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.batchDetInRunning = False
         self.progressBar.reset()
 
-    def showOrHideLog(self):        
+    def configure(self):
+        '''
+            actionSetup:配置参数界面
+        '''
+        configWindow = ConfigureWindow()
+        configWindow.exec()
+        
+
+    def showOrHideLog(self):   
+        '''
+            actionDisplayLog:日志显示
+        '''     
         # 日志窗口
         if self.ui.dockWidgetLog.isVisible():
             self.ui.dockWidgetLog.setVisible(False)
