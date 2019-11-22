@@ -8,6 +8,7 @@ from PyQt5 import QtCore
 from mainWindow import *
 from configureWindow import *
 import config
+from utils import ODConfig
 
 # 批量检测发送信号消息
 MSG_PAUSE = 'pause'
@@ -102,13 +103,91 @@ class ConfigureWindow(QDialog):
         self.ui = Ui_DialogConfig()
         self.ui.setupUi(self)
 
+        self.conf = ODConfig(config.iniFile)
+
         self.initWindow()
 
     def initWindow(self):
         self.setWindowModality(QtCore.Qt.ApplicationModal)
-        
 
+        self.ui.pushButtonOk.clicked.connect(self.clickOK)
+        self.ui.pushButtonCancel.clicked.connect(self.clickCancel)
+
+    def clickOK(self):
+        '''
+            保留当前设置，退出
+        '''        
+        # 检测模式(0:逐张检测， 1：批量将测， 2：加载检测结果)
+        if self.ui.radioButtonSingleDetectMode.isChecked():
+            detecMode = 0
+        elif self.ui.radioButtonBatchDetectMode.isChecked():
+            detecMode = 1
+        else:
+            detecMode = 2
+
+        # 检测参数
+        detectWindowSize = self.ui.lineEditDetectWindowSize.text()
+        if len(detectWindowSize.strip()) == 0:
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText("检测窗口参数不能为空!")
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
+            yesButton = msgBox.addButton('确定', QMessageBox.YesRole)         
+            
+            msgBox.exec()  
+            return      
+
+        nms = self.ui.lineEditNMS.text()
+        if len(nms.strip()) == 0:
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText("NMS参数不能为空!")
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
+            yesButton = msgBox.addButton('确定', QMessageBox.YesRole)         
+            
+            msgBox.exec()   
+            return     
+        # 路径设置   
+        inputPath = self.ui.lineEditInputPath.text()
+        if len(inputPath.strip()) == 0:
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText("输入路径参数不能为空!")
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
+            yesButton = msgBox.addButton('确定', QMessageBox.YesRole)         
+            
+            msgBox.exec()   
+            return  
         
+        outputPath = self.ui.lineEditOutPutPath.text()
+        if len(outputPath.strip()) == 0:
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText("输出路径参数不能为空!")
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
+            yesButton = msgBox.addButton('确定', QMessageBox.YesRole)         
+            
+            msgBox.exec()   
+            return 
+
+        # 写入参数        
+        self.conf.config.set('App','detectionmode',str(detecMode))
+        self.conf.config.set('App','detectionwindowsize',detectWindowSize)
+        self.conf.config.set('App','nms',nms)
+        self.conf.config.set('App','inputrootimagepath',inputPath)
+        self.conf.config.set('App','outputrootresult',outputPath)
+        with open(config.iniFile,'w', encoding="utf-8") as f:
+            self.conf.config.write(f)
+        
+        self.accept()
+
+    def clickCancel(self):
+        '''
+            取消当前设置，退出
+        '''
+        self.reject()
+        
+     
 
 
 class ObjectDetectionMainWindow(QMainWindow):  
@@ -129,13 +208,16 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.batchStart = False
         # 是否批量检测中
         self.batchDetInRunning = False 
+
+        # 配置文件
+        self.conf = ODConfig(config.iniFile)
                 
 
         self.setUI()
 
     def setUI(self):
         # 主窗口标题
-        self.setWindowTitle(config.MainWindowTitle)
+        self.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
         # 左侧显示工具栏
         self.addToolBar(QtCore.Qt.LeftToolBarArea, self.ui.toolBar)    
         # 工具栏按钮初始状态
@@ -168,7 +250,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             msgBox = QMessageBox()
             msgBox.setIcon(QMessageBox.Question)
             msgBox.setText("正在检测中，退出将终止现有检测，是否继续退出？")
-            msgBox.setWindowTitle(config.MainWindowTitle)
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
             yesButton = msgBox.addButton('是', QMessageBox.YesRole)            
             msgBox.addButton('否',QMessageBox.NoRole)          
             
@@ -181,7 +263,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             msgBox = QMessageBox()
             msgBox.setIcon(QMessageBox.Question)
             msgBox.setText("是否要退出程序？")
-            msgBox.setWindowTitle(config.MainWindowTitle)
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
             yesButton = msgBox.addButton('是', QMessageBox.YesRole)
             msgBox.addButton('否',QMessageBox.NoRole)          
             
@@ -203,9 +285,35 @@ class ObjectDetectionMainWindow(QMainWindow):
         '''
             actionSetup:配置参数界面
         '''
-        configWindow = ConfigureWindow()
-        configWindow.exec()
+        configWindow = ConfigureWindow()        
+        # 通过配置文件加载配置参数界面
+        self.conf.reloadIniFile(config.iniFile)
+        self.loadConfToUI(configWindow)
+        retCode = configWindow.exec()
+        print(retCode)
+
+    def loadConfToUI(self,confWindow):
+        '''
+            读取配置文件内容，加载到配置窗口中
+        ''' 
+        # 检测模式((0:逐张检测， 1：批量将测， 2：加载检测结果))
+        detectionMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detectionMode == 0:
+            confWindow.ui.radioButtonSingleDetectMode.setChecked(True)
+        elif detectionMode == 1:
+            confWindow.ui.radioButtonBatchDetectMode.setChecked(True)
+        elif detectionMode == 2:
+            confWindow.ui.radioButtonLoadDetectResult.setChecked(True)
+        else :
+            pass
         
+        # 检测参数
+        confWindow.ui.lineEditDetectWindowSize.setText(self.conf.ConfigSectionMap('App')['detectionwindowsize'])
+        confWindow.ui.lineEditNMS.setText(self.conf.ConfigSectionMap('App')['nms'])
+
+        # 路径设置
+        confWindow.ui.lineEditInputPath.setText(self.conf.ConfigSectionMap('App')['inputrootimagepath'])
+        confWindow.ui.lineEditOutPutPath.setText(self.conf.ConfigSectionMap('App')['outputrootresult'])
 
     def showOrHideLog(self):   
         '''
@@ -233,7 +341,8 @@ class ObjectDetectionMainWindow(QMainWindow):
         '''                   
 
         # 更新工具栏按钮状态 
-        if config.DetectionMode == 0 :  #逐张检测
+        detectionMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detectionMode == 0 :  #逐张检测
             self.ui.actionStart.setEnabled(False)
             self.ui.actionPause.setEnabled(False)
             self.ui.actionStop.setEnabled(False)
@@ -241,7 +350,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionPrev.setEnabled(True)
             self.ui.actionRedo.setEnabled(True)
             self.ui.actionImageAdjust.setEnabled(True)
-        elif config.DetectionMode == 1 :  #批量检测
+        elif detectionMode == 1 :  #批量检测
             self.ui.actionStart.setEnabled(False)
             self.ui.actionPause.setEnabled(True)
             self.ui.actionStop.setEnabled(True)
@@ -259,7 +368,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             else: #第一次点击
                 self.batchStart = True
                 # 统计总数
-                inputRootImagePath = config.InputRootImagePath
+                inputRootImagePath = self.conf.ConfigSectionMap('App')['inputrootimagepath']
                 totalProgress = 0
                 for root, dirs, files in os.walk(inputRootImagePath):
                     for fileName in files:
@@ -274,7 +383,7 @@ class ObjectDetectionMainWindow(QMainWindow):
                 t.change_progress.connect(self.changeProgress)
                 t.start()  
                
-        elif config.DetectionMode == 2 :   #加载检测结果
+        elif detectionMode == 2 :   #加载检测结果
             self.ui.actionStart.setEnabled(False)
             self.ui.actionPause.setEnabled(False)
             self.ui.actionStop.setEnabled(False)
@@ -308,9 +417,10 @@ class ObjectDetectionMainWindow(QMainWindow):
             actionPause
         '''               
         # 更新工具栏按钮状态
-        if config.DetectionMode == 0 :  #逐张检测
+        detectionMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detectionMode == 0 :  #逐张检测
             pass
-        elif config.DetectionMode == 1 :  #批量检测
+        elif detectionMode == 1 :  #批量检测
             self.ui.actionStart.setEnabled(True)
             self.ui.actionPause.setEnabled(False)
             self.ui.actionStop.setEnabled(False)
@@ -332,9 +442,10 @@ class ObjectDetectionMainWindow(QMainWindow):
             actionStop
         '''
         # 更新工具栏按钮状态
-        if config.DetectionMode == 0 :  #逐张检测
+        detectionMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detectionMode == 0 :  #逐张检测
             pass
-        elif config.DetectionMode == 1 :  #批量检测
+        elif detectionMode == 1 :  #批量检测
             self.ui.actionStart.setEnabled(True)
             self.ui.actionPause.setEnabled(False)
             self.ui.actionStop.setEnabled(False)
