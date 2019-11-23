@@ -131,12 +131,16 @@
             <item>
              <widget class="QLabel" name="label">
               <property name="text">
-               <string>检测窗口大小：</string>
+               <string> 检测窗口大小(1-5000):</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QLineEdit" name="lineEditDetectWindowSize"/>
+             <widget class="QLineEdit" name="lineEditDetectWindowSize">
+              <property name="maxLength">
+               <number>32767</number>
+              </property>
+             </widget>
             </item>
            </layout>
           </item>
@@ -145,7 +149,7 @@
             <item>
              <widget class="QLabel" name="label_2">
               <property name="text">
-               <string>          NMS:</string>
+               <string>         NMS(0.3-0.5):</string>
               </property>
              </widget>
             </item>

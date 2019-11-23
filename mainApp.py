@@ -108,10 +108,26 @@ class ConfigureWindow(QDialog):
         self.initWindow()
 
     def initWindow(self):
+        # 检测参数文本框
+        reg_ex = QtCore.QRegExp("[0-9]{1,4}")
+        input_validator = QRegExpValidator(reg_ex, self.ui.lineEditDetectWindowSize)
+        self.ui.lineEditDetectWindowSize.setValidator(input_validator)
+        reg_ex = QtCore.QRegExp("[0][.][3-5]")
+        input_validator = QRegExpValidator(reg_ex, self.ui.lineEditNMS)
+        self.ui.lineEditNMS.setValidator(input_validator)
+
+        # 路径选择文本框
+        self.ui.lineEditInputPath.setReadOnly(True)
+        self.ui.lineEditOutPutPath.setReadOnly(True)
+        # 模态窗口
         self.setWindowModality(QtCore.Qt.ApplicationModal)
 
+        # 按钮事件
         self.ui.pushButtonOk.clicked.connect(self.clickOK)
         self.ui.pushButtonCancel.clicked.connect(self.clickCancel)
+
+        self.ui.pushButtonPathSelect4Input.clicked.connect(self.selInputPath)
+        self.ui.pushButtonPathSelect4Output.clicked.connect(self.selOutputPath)
 
     def clickOK(self):
         '''
@@ -135,7 +151,20 @@ class ConfigureWindow(QDialog):
             yesButton = msgBox.addButton('确定', QMessageBox.YesRole)         
             
             msgBox.exec()  
+            self.ui.lineEditDetectWindowSize.setFocus(True)
             return      
+
+        if (int(detectWindowSize) < config.detWinMin) or \
+            (int(detectWindowSize) > config.detWinMax) :
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText("检测窗口参数不在范围内，请重新设置!")
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
+            yesButton = msgBox.addButton('确定', QMessageBox.YesRole)         
+            
+            msgBox.exec()  
+            self.ui.lineEditDetectWindowSize.setFocus(True)
+            return  
 
         nms = self.ui.lineEditNMS.text()
         if len(nms.strip()) == 0:
@@ -172,7 +201,7 @@ class ConfigureWindow(QDialog):
 
         # 写入参数        
         self.conf.config.set('App','detectionmode',str(detecMode))
-        self.conf.config.set('App','detectionwindowsize',detectWindowSize)
+        self.conf.config.set('App','detectionwindowsize',str(int(detectWindowSize)))
         self.conf.config.set('App','nms',nms)
         self.conf.config.set('App','inputrootimagepath',inputPath)
         self.conf.config.set('App','outputrootresult',outputPath)
@@ -187,7 +216,16 @@ class ConfigureWindow(QDialog):
         '''
         self.reject()
         
+
+    def selInputPath(self):
+        file = str(QFileDialog.getExistingDirectory(self, "选择待检测图像目录"))
+        if len(file) > 0 :
+            self.ui.lineEditInputPath.setText(file)
      
+    def selOutputPath(self):
+        file = str(QFileDialog.getExistingDirectory(self, "选择检测结果存放目录"))
+        if len(file) > 0 :
+            self.ui.lineEditOutPutPath.setText(file)
 
 
 class ObjectDetectionMainWindow(QMainWindow):  
@@ -291,6 +329,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.loadConfToUI(configWindow)
         retCode = configWindow.exec()
         print(retCode)
+        self.conf.reloadIniFile(config.iniFile)
 
     def loadConfToUI(self,confWindow):
         '''
