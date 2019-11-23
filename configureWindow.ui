@@ -6,20 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>561</width>
-    <height>457</height>
+    <width>594</width>
+    <height>566</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>500</width>
-    <height>420</height>
+    <height>500</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>16777215</width>
-    <height>500</height>
+    <height>600</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -29,9 +29,9 @@
    <iconset>
     <normaloff>resources/setup.png</normaloff>resources/setup.png</iconset>
   </property>
-  <layout class="QHBoxLayout" name="horizontalLayout_9">
+  <layout class="QHBoxLayout" name="horizontalLayout_11">
    <item>
-    <layout class="QGridLayout" name="gridLayout" rowstretch="1,2,2,1">
+    <layout class="QGridLayout" name="gridLayout">
      <item row="0" column="0">
       <widget class="QGroupBox" name="groupBoxMode">
        <property name="title">
@@ -119,7 +119,7 @@
       </widget>
      </item>
      <item row="1" column="0">
-      <widget class="QGroupBox" name="groupBox">
+      <widget class="QGroupBox" name="groupBoxDetectParams">
        <property name="title">
         <string>检测参数</string>
        </property>
@@ -164,7 +164,7 @@
       </widget>
      </item>
      <item row="2" column="0">
-      <widget class="QGroupBox" name="groupBox_2">
+      <widget class="QGroupBox" name="groupBoxPathSelect">
        <property name="title">
         <string>路径设置</string>
        </property>
@@ -239,6 +239,48 @@
       </widget>
      </item>
      <item row="3" column="0">
+      <widget class="QGroupBox" name="groupBoxDetectResult">
+       <property name="title">
+        <string>检测结果</string>
+       </property>
+       <layout class="QHBoxLayout" name="horizontalLayout_10">
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_9">
+          <item>
+           <widget class="QLabel" name="label_5">
+            <property name="text">
+             <string>路径：</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="lineEditDetectResult"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButtonPathSelect4DetectResult">
+            <property name="minimumSize">
+             <size>
+              <width>40</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>40</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item row="4" column="0">
       <layout class="QHBoxLayout" name="horizontalLayout_8">
        <item>
         <spacer name="horizontalSpacer_10">

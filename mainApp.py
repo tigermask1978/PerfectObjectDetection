@@ -108,6 +108,13 @@ class ConfigureWindow(QDialog):
         self.initWindow()
 
     def initWindow(self):
+        detecMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detecMode == 2: #加载检测结果模式
+            self.displayDetectResultUI()
+        else:
+            self.displayDetectUI()
+        
+
         # 检测参数文本框
         reg_ex = QtCore.QRegExp("[0-9]{1,4}")
         input_validator = QRegExpValidator(reg_ex, self.ui.lineEditDetectWindowSize)
@@ -119,15 +126,41 @@ class ConfigureWindow(QDialog):
         # 路径选择文本框
         self.ui.lineEditInputPath.setReadOnly(True)
         self.ui.lineEditOutPutPath.setReadOnly(True)
+        # 检测结果路径选择文本框
+        self.ui.lineEditDetectResult.setReadOnly(True)
         # 模态窗口
         self.setWindowModality(QtCore.Qt.ApplicationModal)
 
         # 按钮事件
+        self.ui.radioButtonSingleDetectMode.clicked.connect(self.radioButtonModeSelect)
+        self.ui.radioButtonBatchDetectMode.clicked.connect(self.radioButtonModeSelect)
+        self.ui.radioButtonLoadDetectResult.clicked.connect(self.radioButtonModeSelect)
+        
+
         self.ui.pushButtonOk.clicked.connect(self.clickOK)
         self.ui.pushButtonCancel.clicked.connect(self.clickCancel)
 
         self.ui.pushButtonPathSelect4Input.clicked.connect(self.selInputPath)
         self.ui.pushButtonPathSelect4Output.clicked.connect(self.selOutputPath)
+
+        self.ui.pushButtonPathSelect4DetectResult.clicked.connect(self.selResultPath)
+       
+    def displayDetectResultUI(self):        
+        self.ui.groupBoxDetectParams.setVisible(False)
+        self.ui.groupBoxPathSelect.setVisible(False)
+        self.ui.groupBoxDetectResult.setVisible(True)
+
+    def displayDetectUI(self):
+        self.ui.groupBoxDetectParams.setVisible(True)
+        self.ui.groupBoxPathSelect.setVisible(True)
+        self.ui.groupBoxDetectResult.setVisible(False)
+
+    def radioButtonModeSelect(self):
+        if self.ui.radioButtonLoadDetectResult.isChecked():
+            self.displayDetectResultUI()
+        else:
+            self.displayDetectUI()
+        
 
     def clickOK(self):
         '''
@@ -198,13 +231,14 @@ class ConfigureWindow(QDialog):
             
             msgBox.exec()   
             return 
-
+        loadresultpath = self.ui.lineEditDetectResult.text()
         # 写入参数        
         self.conf.config.set('App','detectionmode',str(detecMode))
         self.conf.config.set('App','detectionwindowsize',str(int(detectWindowSize)))
         self.conf.config.set('App','nms',nms)
         self.conf.config.set('App','inputrootimagepath',inputPath)
         self.conf.config.set('App','outputrootresult',outputPath)
+        self.conf.config.set('App','loadresultpath',loadresultpath)
         with open(config.iniFile,'w', encoding="utf-8") as f:
             self.conf.config.write(f)
         
@@ -226,6 +260,11 @@ class ConfigureWindow(QDialog):
         file = str(QFileDialog.getExistingDirectory(self, "选择检测结果存放目录"))
         if len(file) > 0 :
             self.ui.lineEditOutPutPath.setText(file)
+
+    def selResultPath(self):
+        file = str(QFileDialog.getExistingDirectory(self, "选择检测结果存放目录"))
+        if len(file) > 0 :
+            self.ui.lineEditDetectResult.setText(file)
 
 
 class ObjectDetectionMainWindow(QMainWindow):  
@@ -323,12 +362,13 @@ class ObjectDetectionMainWindow(QMainWindow):
         '''
             actionSetup:配置参数界面
         '''
-        configWindow = ConfigureWindow()        
+               
         # 通过配置文件加载配置参数界面
         self.conf.reloadIniFile(config.iniFile)
+        configWindow = ConfigureWindow() 
         self.loadConfToUI(configWindow)
         retCode = configWindow.exec()
-        print(retCode)
+        # print(retCode)
         self.conf.reloadIniFile(config.iniFile)
 
     def loadConfToUI(self,confWindow):
@@ -353,6 +393,8 @@ class ObjectDetectionMainWindow(QMainWindow):
         # 路径设置
         confWindow.ui.lineEditInputPath.setText(self.conf.ConfigSectionMap('App')['inputrootimagepath'])
         confWindow.ui.lineEditOutPutPath.setText(self.conf.ConfigSectionMap('App')['outputrootresult'])
+
+        confWindow.ui.lineEditDetectResult.setText(self.conf.ConfigSectionMap('App')['loadresultpath'])
 
     def showOrHideLog(self):   
         '''
