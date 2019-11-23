@@ -232,6 +232,15 @@ class ConfigureWindow(QDialog):
             msgBox.exec()   
             return 
         loadresultpath = self.ui.lineEditDetectResult.text()
+        if len(loadresultpath.strip()) == 0:
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText("检测结果路径参数不能为空!")
+            msgBox.setWindowTitle(self.conf.ConfigSectionMap('App')['mainwindowtitle'])
+            yesButton = msgBox.addButton('确定', QMessageBox.YesRole)         
+            
+            msgBox.exec()   
+            return 
         # 写入参数        
         self.conf.config.set('App','detectionmode',str(detecMode))
         self.conf.config.set('App','detectionwindowsize',str(int(detectWindowSize)))
@@ -549,13 +558,49 @@ class ObjectDetectionMainWindow(QMainWindow):
 
     def nextImage(self):  
         pass
- 
+
+
+
+
+def checkSysParams():
+    '''
+        检查系统参数是否完备
+        返回：0-没有问题  1-有问题
+    '''
+    time.sleep(5)
+    return 0
 
         
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    pixmap = QPixmap('./resources/splash.jpg')
+    splashScreen = QSplashScreen(pixmap, QtCore.Qt.WindowStaysOnTopHint)
+    splashScreen.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint | QtCore.Qt.FramelessWindowHint)
+    splashScreen.setEnabled(False)
+    splashScreen.show()
+   
+    
+    splashScreen.showMessage('正在检查系统运行参数......')
+    ret = checkSysParams()
+    if ret == 1:
+        splashScreen.showMessage('系统参数检查有误,请检查后重试。即将退出......')
+        time.sleep(2)
+        sys.exit()
+    splashScreen.showMessage('系统运行参数检查完毕！')
+
+    app.processEvents()
+
+    splashScreen.showMessage('正在加载模型......')
+    time.sleep(5)
+    splashScreen.showMessage('加载模型完毕！')
+
+    app.processEvents()
+
     w = ObjectDetectionMainWindow()
     w.show()
+
+    splashScreen.finish(w)
+
     sys.exit(app.exec_())
