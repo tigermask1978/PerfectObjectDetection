@@ -91,7 +91,8 @@ class batchDetectionThread(QtCore.QThread):
 
                 if fileName[fileName.rfind('.'):].upper() == '.JPG':                   
                     time.sleep(0.1)
-                    fileNameWithFullPath = os.path.join(root, fileName)
+                    # fileNameWithFullPath = os.path.join(root, fileName)
+                    fileNameWithFullPath = Path(root).joinpath(fileName).as_posix()
                     print(fileNameWithFullPath)
                     # 处理完一张，发送消息更新进度条和界面
                     self.change_progress.emit(1, fileNameWithFullPath)  
@@ -546,7 +547,8 @@ class ObjectDetectionMainWindow(QMainWindow):
             for root, dirs, files in os.walk(inputRootImagePath):
                 for fileName in files:
                     if fileName[fileName.rfind('.'):].upper() == '.JPG':
-                        self.allImageFiles.append(os.path.join(root, fileName))
+                        # self.allImageFiles.append(os.path.join(root, fileName))
+                        self.allImageFiles.append(Path(root).joinpath(fileName).as_posix())
                         totalProgress +=1
             
 
@@ -642,7 +644,7 @@ class ObjectDetectionMainWindow(QMainWindow):
                 
                 # 此处加载第一张
                 self.currentImgIndex = 0
-                fName = self.loadDetectResult()
+                fName = self.loadDetectResult(self.allAnnoFiles[self.currentImgIndex])
                 self.progressBar.setValue(1)
                 self.ui.plainTextEditLog.appendPlainText(fName)
         else:
@@ -745,7 +747,7 @@ class ObjectDetectionMainWindow(QMainWindow):
                 self.currentImgIndex += 1
                 # 加载下一张
                 # time.sleep(0.1)
-                self.loadDetectResult()
+                self.loadDetectResult(self.allAnnoFiles[self.currentImgIndex])
 
                 self.progressBar.setValue(self.progressBar.value() + 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
@@ -778,7 +780,7 @@ class ObjectDetectionMainWindow(QMainWindow):
                 self.currentImgIndex -= 1
                 # 加载上一张
                 # time.sleep(0.1)
-                self.loadDetectResult()
+                self.loadDetectResult(self.allAnnoFiles[self.currentImgIndex])
 
                 self.progressBar.setValue(self.progressBar.value() - 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
@@ -787,22 +789,16 @@ class ObjectDetectionMainWindow(QMainWindow):
                 self.ui.actionNext.setEnabled(True)
 
 
-    def loadDetectResult(self):
+    def loadDetectResult(self,annoFile):
         '''
-            从allAnnoFiles列表中，取出currentImgIndex位置的文件，加载到界面中
+            从annoFile文件中读取内容加载到界面中
             返回：加载图像的文件名
         '''
-        annoFile = self.allAnnoFiles[self.currentImgIndex]
+        # annoFile = self.allAnnoFiles[self.currentImgIndex]
         dr = DetectResult(annoJsonFile=annoFile)
         # 清空crop列表
         self.ui.listWidgetCropImages.clear()
-        self.cropImages = []
-        
-        # self.imageFile = imageFile        
-        # self.annoFile = annoFile
-        # with open(annoFile,'r') as f:
-        #     jdata = json.load(f)
-        #     annoRects = jdata['shapes']
+        self.cropImages = []               
         
         imgFile = dr.getImageFileName()
         # print(imgFile)
@@ -811,14 +807,9 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.imageView.loadPicFile(imgFile)
         self.ui.imageView.loadAnnoRects(annoRects)   
         self.ui.imageView.fitInView()
-        # 加载crop图像
-        # self.loadCropImages()
+        # 加载crop图像        
         img = cv2.imread(imgFile)
-
-        # with open(self.annoFile, 'r') as f:
-        #     jdata = json.load(f)
-        #     allShapes = jdata['shapes']
-
+        
         for shape in annoRects:
             self.cropImages.append({
                 "id": shape['id'],
@@ -862,7 +853,8 @@ def checkCaffeEnv():
     
     try:
         import sys
-        sys.path.append(os.path.join(config.caffe_root,'python'))
+        # sys.path.append(os.path.join(config.caffe_root,'python'))
+        sys.path.append(Path(config.caffe_root).joinpath('python').as_posix())
         import caffe
     except:
         ret = 1
