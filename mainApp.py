@@ -9,12 +9,15 @@ from mainWindow import *
 from configureWindow import *
 import config
 from utils import ODConfig
+import configparser
 
 # 批量检测发送信号消息
 MSG_PAUSE = 'pause'
 MSG_RESUME = 'resume'
 MSG_STOP = 'stop'
 MSG_FINISHED = 'finished'
+# 配置窗口发送信号
+MSG_CONF_COMPLETED = 'completed'
 
 class batchDetectionThread(QtCore.QThread):
     '''
@@ -97,6 +100,11 @@ class batchDetectionThread(QtCore.QThread):
         self.change_progress.emit(1, MSG_FINISHED)     
 
 class ConfigureWindow(QDialog):
+    '''
+        配置参数窗口
+    '''
+    # 配置完成信号
+    config_signal = QtCore.pyqtSignal(str)
     def __init__(self):
         super().__init__()
 
@@ -251,6 +259,8 @@ class ConfigureWindow(QDialog):
         with open(config.iniFile,'w', encoding="utf-8") as f:
             self.conf.config.write(f)
         
+        # 完成配置发送信号
+        self.config_signal.emit(MSG_CONF_COMPLETED)
         self.accept()
 
     def clickCancel(self):
@@ -287,13 +297,18 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.setupUi(self)        
 
         # 将进度条加入状态栏 
-        self.progressBar = QProgressBar()  
-        self.ui.statusbar.addPermanentWidget(self.progressBar)  
+        self.progressBar = QProgressBar()          
+        self.ui.statusbar.addPermanentWidget(self.progressBar,0)  
+        
 
         # 批量检测标志(True标识已经开始批量检测，开始按钮不是第一次点击)
         self.batchStart = False
         # 是否批量检测中
         self.batchDetInRunning = False 
+
+        # 逐张检测
+        self.allImageFiles = []
+        self.currentImgIndex = 0
 
         # 配置文件
         self.conf = ODConfig(config.iniFile)
@@ -307,7 +322,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         # 左侧显示工具栏
         self.addToolBar(QtCore.Qt.LeftToolBarArea, self.ui.toolBar)    
         # 工具栏按钮初始状态
-        self.ui.actionStart.setEnabled(True)
+        self.ui.actionStart.setEnabled(False)
         self.ui.actionPause.setEnabled(False)
         self.ui.actionStop.setEnabled(False)
         self.ui.actionNext.setEnabled(False)
@@ -327,6 +342,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.actionPause.triggered.connect(self.pauseDetection)
         self.ui.actionStop.triggered.connect(self.stopDetection)
         self.ui.actionNext.triggered.connect(self.nextImage)  
+        self.ui.actionPrev.triggered.connect(self.prevImage)
         # 调用系统的close事件(执行的是closeEvent)
         self.ui.actionExit.triggered.connect(self.close)
 
@@ -375,10 +391,61 @@ class ObjectDetectionMainWindow(QMainWindow):
         # 通过配置文件加载配置参数界面
         self.conf.reloadIniFile(config.iniFile)
         configWindow = ConfigureWindow() 
+        # 信号处理
+        configWindow.config_signal.connect(self.configSignalCompleted)
         self.loadConfToUI(configWindow)
         retCode = configWindow.exec()
         # print(retCode)
-        self.conf.reloadIniFile(config.iniFile)
+        self.conf.reloadIniFile(config.iniFile)  
+
+        self.progressBar.reset()      
+
+    def configSignalCompleted(self):
+        '''
+            完成参数设置，根据设置修改界面
+        '''
+
+        # 状态栏显示参数    
+        odConfig = ODConfig(config.iniFile)
+        detectionMode = int(odConfig.ConfigSectionMap('App')['detectionmode'])
+        detectWinSize = odConfig.ConfigSectionMap('App')['detectionwindowsize']
+        nms = odConfig.ConfigSectionMap('App')['nms']
+        loadDetectResultPath = odConfig.ConfigSectionMap('App')['loadresultpath']
+
+        if int(detectionMode) == 2:
+            self.ui.statusbar.showMessage('检测模式: {}, 检测结果载入路径: {} '.format('结果载入',loadDetectResultPath))
+        elif int(detectionMode) == 0:
+            self.ui.statusbar.showMessage('检测模式: {}, 检测窗口大小: {} , NMS: {}'.format('逐张检测',detectWinSize, nms))
+        else:
+            self.ui.statusbar.showMessage('检测模式: {}, 检测窗口大小: {} , NMS: {}'.format('批量检测',detectWinSize, nms))
+
+        if detectionMode == 0 :  #逐张检测
+            self.ui.actionStart.setEnabled(True)
+            self.ui.actionPause.setEnabled(False)
+            self.ui.actionStop.setEnabled(False)
+            self.ui.actionNext.setEnabled(False)
+            self.ui.actionPrev.setEnabled(False)
+            self.ui.actionRedo.setEnabled(False)
+            self.ui.actionImageAdjust.setEnabled(False)
+        elif detectionMode == 1 :  #批量检测
+            self.ui.actionStart.setEnabled(True)
+            self.ui.actionPause.setEnabled(False)
+            self.ui.actionStop.setEnabled(False)
+            self.ui.actionNext.setEnabled(False)
+            self.ui.actionPrev.setEnabled(False)
+            self.ui.actionRedo.setEnabled(False)
+            self.ui.actionImageAdjust.setEnabled(False)         
+               
+        elif detectionMode == 2 :   #加载检测结果
+            self.ui.actionStart.setEnabled(True)
+            self.ui.actionPause.setEnabled(False)
+            self.ui.actionStop.setEnabled(False)
+            self.ui.actionNext.setEnabled(False)
+            self.ui.actionPrev.setEnabled(False)
+            self.ui.actionRedo.setEnabled(False)
+            self.ui.actionImageAdjust.setEnabled(False)
+        else:
+            pass
 
     def loadConfToUI(self,confWindow):
         '''
@@ -440,6 +507,40 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionPrev.setEnabled(True)
             self.ui.actionRedo.setEnabled(True)
             self.ui.actionImageAdjust.setEnabled(True)
+
+            self.ui.plainTextEditLog.clear()
+
+            # 统计总数
+            inputRootImagePath = self.conf.ConfigSectionMap('App')['inputrootimagepath']
+            totalProgress = 0
+            for root, dirs, files in os.walk(inputRootImagePath):
+                for fileName in files:
+                    if fileName[fileName.rfind('.'):].upper() == '.JPG':
+                        self.allImageFiles.append(os.path.join(root, fileName))
+                        totalProgress +=1
+            
+
+            if totalProgress == 0:
+                self.ui.actionStart.setEnabled(False)
+                self.ui.actionNext.setEnabled(False)
+                self.ui.actionPrev.setEnabled(False)
+                self.ui.actionRedo.setEnabled(False)
+                self.ui.actionImageAdjust.setEnabled(False)
+                self.ui.statusbar.showMessage('目录下没有可检测的图像。')
+            else:
+                # 设置进度条
+                self.progressBar.setMinimum(0)
+                self.progressBar.setMaximum(totalProgress)               
+                
+                # 此处检测第一张
+                self.currentImgIndex = 0
+                time.sleep(1)
+                self.progressBar.setValue(1)
+                self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[0])
+                
+            
+
+
         elif detectionMode == 1 :  #批量检测
             self.ui.actionStart.setEnabled(False)
             self.ui.actionPause.setEnabled(True)
@@ -448,6 +549,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionPrev.setEnabled(False)
             self.ui.actionRedo.setEnabled(False)
             self.ui.actionImageAdjust.setEnabled(False)
+            self.ui.actionSetup.setEnabled(False)
 
             self.batchDetInRunning = True
 
@@ -457,6 +559,7 @@ class ObjectDetectionMainWindow(QMainWindow):
                 self.batchDetectionSignal.emit(MSG_RESUME)                
             else: #第一次点击
                 self.batchStart = True
+                self.ui.plainTextEditLog.clear()
                 # 统计总数
                 inputRootImagePath = self.conf.ConfigSectionMap('App')['inputrootimagepath']
                 totalProgress = 0
@@ -467,7 +570,7 @@ class ObjectDetectionMainWindow(QMainWindow):
                 # 设置进度条
                 self.progressBar.setMinimum(1)
                 self.progressBar.setMaximum(totalProgress)
-                self.ui.statusbar.showMessage('批量检测...')
+                # self.ui.statusbar.showMessage('批量检测...')
                 # 启动进程开始批量检测
                 t = batchDetectionThread(self,inputRootImagePath=inputRootImagePath)
                 t.change_progress.connect(self.changeProgress)
@@ -481,6 +584,8 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionPrev.setEnabled(True)
             self.ui.actionRedo.setEnabled(False)
             self.ui.actionImageAdjust.setEnabled(True)
+
+            self.ui.plainTextEditLog.clear()
         else:
             pass          
 
@@ -494,6 +599,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionPrev.setEnabled(False)
             self.ui.actionRedo.setEnabled(False)
             self.ui.actionImageAdjust.setEnabled(False)
+            self.ui.actionSetup.setEnabled(True)
 
             self.restoreUI()
         else:
@@ -543,6 +649,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionPrev.setEnabled(False)
             self.ui.actionRedo.setEnabled(False)
             self.ui.actionImageAdjust.setEnabled(False)
+            self.ui.actionSetup.setEnabled(True)
 
             # 向批量检测进程发送stop信号
             print('sending stop signal...')
@@ -557,20 +664,78 @@ class ObjectDetectionMainWindow(QMainWindow):
         
 
     def nextImage(self):  
-        pass
+        detectionMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detectionMode == 0:  #逐张检测
+            totalFileCount = len(self.allImageFiles)            
+            if self.currentImgIndex + 1 == totalFileCount:
+                self.ui.statusbar.showMessage('已到最后一张。')
+                self.ui.actionNext.setEnabled(False)                
+            else:
+                self.currentImgIndex += 1
+                # 检测下一张
+                time.sleep(0.1)
+                self.progressBar.setValue(self.progressBar.value() + 1)
+                self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[self.currentImgIndex])
+            if self.currentImgIndex != 0:
+                self.ui.actionPrev.setEnabled(True)
+        elif detectionMode == 2:  #加载检测结果
+            pass
 
 
+    def prevImage(self):
+        detectionMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detectionMode == 0:  #逐张检测
+            totalFileCount = len(self.allImageFiles)            
+            if self.currentImgIndex == 0:
+                self.ui.statusbar.showMessage('已到第一张。')
+                self.ui.actionPrev.setEnabled(False)
+            else:
+                self.currentImgIndex -= 1
+                # 检测上一张
+                time.sleep(0.1)
+                self.progressBar.setValue(self.progressBar.value() - 1)
+                self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[self.currentImgIndex])
 
+            if self.currentImgIndex != totalFileCount - 1:
+                self.ui.actionNext.setEnabled(True)
+        elif detectionMode == 2:  #加载检测结果
+            pass
+
+
+def checkCaffeEnv():
+    '''
+        检查系统caffe环境
+        返回：0-没有问题  1-有问题 
+    '''
+    ret = 0
+    try:
+        import caffe
+    except:
+        ret = 1
+    
+    try:
+        import sys
+        sys.path.append(os.path.join(config.caffe_root,'python'))
+        import caffe
+    except:
+        ret = 1
+
+    return ret
 
 def checkSysParams():
     '''
         检查系统参数是否完备
         返回：0-没有问题  1-有问题
     '''
-    time.sleep(5)
-    return 0
+    iniConf = configparser.ConfigParser()
+    iniConf.read(config.iniFile, encoding='utf-8')
+    paramsInIniFileSet = set(iniConf.options('App'))
+    paramsInConfigFileSet = set(config.runningParams)
 
-        
+    if paramsInIniFileSet.issubset(paramsInConfigFileSet):
+        return 0
+
+    return 1        
 
 
 if __name__ == "__main__":
@@ -581,11 +746,21 @@ if __name__ == "__main__":
     splashScreen.setEnabled(False)
     splashScreen.show()
    
+    # 正式运行请取消下面注释
+    # splashScreen.showMessage('正在检查系统caffe环境......')
+    # ret = checkCaffeEnv()
+    # if ret == 1:
+    #     splashScreen.showMessage('caffe环境有误,请检查后重试。即将退出......')
+    #     time.sleep(2)
+    #     sys.exit()
+    # splashScreen.showMessage('caffe环境检查完毕！')
+
+    # app.processEvents()
     
     splashScreen.showMessage('正在检查系统运行参数......')
     ret = checkSysParams()
     if ret == 1:
-        splashScreen.showMessage('系统参数检查有误,请检查后重试。即将退出......')
+        splashScreen.showMessage('系统参数有误,请检查后重试。即将退出......')
         time.sleep(2)
         sys.exit()
     splashScreen.showMessage('系统运行参数检查完毕！')
@@ -593,7 +768,7 @@ if __name__ == "__main__":
     app.processEvents()
 
     splashScreen.showMessage('正在加载模型......')
-    time.sleep(5)
+    time.sleep(2)
     splashScreen.showMessage('加载模型完毕！')
 
     app.processEvents()

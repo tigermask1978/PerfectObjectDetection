@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 # 系统运行的配置(不需要在程序运行中修改的配置在此处定义)
+
+# caffe主目录
+caffe_root = './caffe'
 # 配置文件
 iniFile = './od.ini'
-# 系统参数列表(用于运行系统前检查)
+# 系统参数列表(用于运行系统前检查,应包含所有在iniFile文件中定义的配置项)
 runningParams = [
                 'mainwindowtitle',  # 系统标题
                 'detectionmode',    # 检测模式
