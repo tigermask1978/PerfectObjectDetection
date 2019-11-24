@@ -170,9 +170,9 @@ class ImageView(QGraphicsView):
             print(item.__class__)
     
     def onSceneFocusItemChanged(self, newFocusItem, oldFocusItem, reason):
-        print(type(newFocusItem).__name__)
-        print(type(oldFocusItem).__name__)
-        print(self.annoRects)      
+        # print(type(newFocusItem).__name__)
+        # print(type(oldFocusItem).__name__)
+        # print(self.annoRects)      
 
         if (type(newFocusItem).__name__) == 'BoltAnnoRect':
             self.selectedRectId = newFocusItem.id
@@ -189,8 +189,8 @@ class ImageView(QGraphicsView):
             newFocusItem.setSelectedState()
         if (newFocusItem is None) and (oldFocusItem is not None):
             pass    
-        print(self.selectedRectId)
-        print(self.getLabelById(self.selectedRectId))
+        # print(self.selectedRectId)
+        # print(self.getLabelById(self.selectedRectId))
         
     def resizeEvent(self, event):                
         self.fitInView()    

@@ -8,8 +8,10 @@ from PyQt5 import QtCore
 from mainWindow import *
 from configureWindow import *
 import config
-from utils import ODConfig
+from utils import ODConfig, DetectResult
 import configparser
+import cv2
+from pathlib import Path
 
 # 批量检测发送信号消息
 MSG_PAUSE = 'pause'
@@ -355,6 +357,24 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.actionPrev.triggered.connect(self.prevImage)
         # 调用系统的close事件(执行的是closeEvent)
         self.ui.actionExit.triggered.connect(self.close)
+        # 裁剪小图的事件
+        self.ui.listWidgetCropImages.itemClicked.connect(self.onListWidgetItemClicked)
+        # 自定义信号:处理从imageview中选择一个标注时的事件
+        self.ui.imageView.annoRectSelected.connect(self.onSelectOneAnnoRect)
+
+    def onListWidgetItemClicked(self,item):
+        # print(item.data(Qt.UserRole))
+        itemId = item.data(QtCore.Qt.UserRole)
+        self.ui.imageView.selectAnnoRectById(itemId)
+
+    def onSelectOneAnnoRect(self,id):
+        # 接收所选的标注id，在crop列表中选择它
+        # print('selected id is {}'.format(id))
+        for i in range(self.ui.listWidgetCropImages.count()):
+            item = self.ui.listWidgetCropImages.item(i)
+            itemId = item.data(QtCore.Qt.UserRole)
+            if itemId == id:
+                item.setSelected(True)
 
     def closeEvent(self, event):
         # 重写主窗口的close事件，加入关闭逻辑
@@ -603,7 +623,8 @@ class ObjectDetectionMainWindow(QMainWindow):
             for root, dirs, files in os.walk(loadResultPath):
                 for fileName in files:
                     if fileName[fileName.rfind('.'):].upper() == '.JSON':
-                        self.allAnnoFiles.append(os.path.join(root, fileName))
+                        self.allAnnoFiles.append(Path(root).joinpath(fileName))
+                        # self.allAnnoFiles.append(os.path.join(root, fileName))
                         totalProgress +=1
             
 
@@ -621,9 +642,9 @@ class ObjectDetectionMainWindow(QMainWindow):
                 
                 # 此处加载第一张
                 self.currentImgIndex = 0
-                time.sleep(1)
+                fName = self.loadDetectResult()
                 self.progressBar.setValue(1)
-                self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[0])
+                self.ui.plainTextEditLog.appendPlainText(fName)
         else:
             pass          
 
@@ -644,7 +665,6 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.progressBar.setValue(self.progressBar.value() + i)
             self.ui.plainTextEditLog.appendPlainText(s)
         
-
 
     def pauseDetection(self):
         '''
@@ -724,7 +744,9 @@ class ObjectDetectionMainWindow(QMainWindow):
             else:
                 self.currentImgIndex += 1
                 # 加载下一张
-                time.sleep(0.1)
+                # time.sleep(0.1)
+                self.loadDetectResult()
+
                 self.progressBar.setValue(self.progressBar.value() + 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
             if self.currentImgIndex != 0:
@@ -754,13 +776,77 @@ class ObjectDetectionMainWindow(QMainWindow):
                 self.ui.actionPrev.setEnabled(False)
             else:
                 self.currentImgIndex -= 1
-                # 检测上一张
-                time.sleep(0.1)
+                # 加载上一张
+                # time.sleep(0.1)
+                self.loadDetectResult()
+
                 self.progressBar.setValue(self.progressBar.value() - 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
 
             if self.currentImgIndex != totalFileCount - 1:
                 self.ui.actionNext.setEnabled(True)
+
+
+    def loadDetectResult(self):
+        '''
+            从allAnnoFiles列表中，取出currentImgIndex位置的文件，加载到界面中
+            返回：加载图像的文件名
+        '''
+        annoFile = self.allAnnoFiles[self.currentImgIndex]
+        dr = DetectResult(annoJsonFile=annoFile)
+        # 清空crop列表
+        self.ui.listWidgetCropImages.clear()
+        self.cropImages = []
+        
+        # self.imageFile = imageFile        
+        # self.annoFile = annoFile
+        # with open(annoFile,'r') as f:
+        #     jdata = json.load(f)
+        #     annoRects = jdata['shapes']
+        
+        imgFile = dr.getImageFileName()
+        # print(imgFile)
+        annoRects = dr.getImageAnnos()
+        # 加载图像和标注
+        self.ui.imageView.loadPicFile(imgFile)
+        self.ui.imageView.loadAnnoRects(annoRects)   
+        self.ui.imageView.fitInView()
+        # 加载crop图像
+        # self.loadCropImages()
+        img = cv2.imread(imgFile)
+
+        # with open(self.annoFile, 'r') as f:
+        #     jdata = json.load(f)
+        #     allShapes = jdata['shapes']
+
+        for shape in annoRects:
+            self.cropImages.append({
+                "id": shape['id'],
+                "className": shape['className'],
+                # crop_img = img[y:y+height, x:x+width]
+                'crop_image': img[shape['shape'][1]:shape['shape'][3], shape['shape'][0]: shape['shape'][2]]
+            })
+        
+        for cropImg in self.cropImages:
+            item = QListWidgetItem(cropImg['className'])  
+            # 保存id值 
+            item.setData(QtCore.Qt.UserRole, cropImg['id'])     
+            icon = QIcon()
+            # crop图像
+            img = cropImg['crop_image']
+
+            height, width, bytesPerComponent = img.shape
+            bytesPerLine = 3 * width
+            cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img)               
+            # 注意此处的copy()
+            qImg = QImage(img.copy(), width, height, bytesPerLine,QImage.Format_RGB888)
+            # 通过icon显示crop的图像
+            icon.addPixmap(QPixmap.fromImage(qImg),QIcon.Normal, QIcon.Off)
+            item.setIcon(icon)
+            self.ui.listWidgetCropImages.addItem(item) 
+
+        return imgFile
+
 
 
 def checkCaffeEnv():
