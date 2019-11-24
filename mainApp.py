@@ -308,6 +308,9 @@ class ObjectDetectionMainWindow(QMainWindow):
 
         # 逐张检测
         self.allImageFiles = []
+        # 加载结果
+        self.allAnnoFiles = []
+        # 当前检测或加载的图像索引
         self.currentImgIndex = 0
 
         # 配置文件
@@ -333,7 +336,14 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.dockWidgetLog.setMinimumSize(400,200)
         self.ui.dockWidgetLog.setVisible(False)
         # 状态栏
-        self.ui.statusbar.showMessage('准备就绪。')        
+        self.ui.statusbar.showMessage('准备就绪。')  
+
+        # 设置ListWidget显示模式
+        self.ui.listWidgetCropImages.setViewMode(QListView.IconMode)
+        # 设置ListWidget显示图像大小
+        # self.ui.listWidgetCropImages.setIconSize(QtCore.QSize(150,100))
+        # 设置ListWidget禁止拖放
+        self.ui.listWidgetCropImages.setMovement(QListView.Static)        
 
         # Actions
         self.ui.actionSetup.triggered.connect(self.configure)
@@ -586,6 +596,34 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.ui.actionImageAdjust.setEnabled(True)
 
             self.ui.plainTextEditLog.clear()
+
+            # 统计总数
+            loadResultPath = self.conf.ConfigSectionMap('App')['loadresultpath']
+            totalProgress = 0
+            for root, dirs, files in os.walk(loadResultPath):
+                for fileName in files:
+                    if fileName[fileName.rfind('.'):].upper() == '.JSON':
+                        self.allAnnoFiles.append(os.path.join(root, fileName))
+                        totalProgress +=1
+            
+
+            if totalProgress == 0:
+                self.ui.actionStart.setEnabled(False)
+                self.ui.actionNext.setEnabled(False)
+                self.ui.actionPrev.setEnabled(False)
+                self.ui.actionRedo.setEnabled(False)
+                self.ui.actionImageAdjust.setEnabled(False)
+                self.ui.statusbar.showMessage('目录下没有检测结果。')
+            else:
+                # 设置进度条
+                self.progressBar.setMinimum(0)
+                self.progressBar.setMaximum(totalProgress)               
+                
+                # 此处加载第一张
+                self.currentImgIndex = 0
+                time.sleep(1)
+                self.progressBar.setValue(1)
+                self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[0])
         else:
             pass          
 
@@ -679,7 +717,18 @@ class ObjectDetectionMainWindow(QMainWindow):
             if self.currentImgIndex != 0:
                 self.ui.actionPrev.setEnabled(True)
         elif detectionMode == 2:  #加载检测结果
-            pass
+            totalFileCount = len(self.allAnnoFiles)            
+            if self.currentImgIndex + 1 == totalFileCount:
+                self.ui.statusbar.showMessage('已到最后一张。')
+                self.ui.actionNext.setEnabled(False)                
+            else:
+                self.currentImgIndex += 1
+                # 加载下一张
+                time.sleep(0.1)
+                self.progressBar.setValue(self.progressBar.value() + 1)
+                self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
+            if self.currentImgIndex != 0:
+                self.ui.actionPrev.setEnabled(True)
 
 
     def prevImage(self):
@@ -699,7 +748,19 @@ class ObjectDetectionMainWindow(QMainWindow):
             if self.currentImgIndex != totalFileCount - 1:
                 self.ui.actionNext.setEnabled(True)
         elif detectionMode == 2:  #加载检测结果
-            pass
+            totalFileCount = len(self.allAnnoFiles)            
+            if self.currentImgIndex == 0:
+                self.ui.statusbar.showMessage('已到第一张。')
+                self.ui.actionPrev.setEnabled(False)
+            else:
+                self.currentImgIndex -= 1
+                # 检测上一张
+                time.sleep(0.1)
+                self.progressBar.setValue(self.progressBar.value() - 1)
+                self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
+
+            if self.currentImgIndex != totalFileCount - 1:
+                self.ui.actionNext.setEnabled(True)
 
 
 def checkCaffeEnv():

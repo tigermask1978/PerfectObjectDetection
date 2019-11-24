@@ -28,14 +28,14 @@
     <item row="0" column="0">
      <layout class="QGridLayout" name="gridLayout" rowstretch="1,4,2">
       <item row="1" column="0">
-       <widget class="QGraphicsView" name="graphicsView">
+       <widget class="ImageView" name="imageView">
         <property name="tabletTracking">
          <bool>false</bool>
         </property>
        </widget>
       </item>
       <item row="2" column="0">
-       <widget class="QListWidget" name="listWidget"/>
+       <widget class="QListWidget" name="listWidgetCropImages"/>
       </item>
       <item row="0" column="0">
        <widget class="QLabel" name="labelHeader">
@@ -250,6 +250,13 @@
    </property>
   </action>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ImageView</class>
+   <extends>QGraphicsView</extends>
+   <header>imageview.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
