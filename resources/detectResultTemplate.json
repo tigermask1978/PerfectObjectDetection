@@ -1,0 +1,27 @@
+{
+    "imgFile": "C:\\MyData\\detectResult\\test.jpg",
+    "shapes":
+    [
+        {
+            "id" : 1,
+            "classID" : 34,
+            "className": "t1,v2.s3", 
+            "shape" : [1200,1800,1500,2100],
+            "score" : 0.85
+        },
+        {
+            "id": 2,
+            "classID" : 25,
+            "className": "t3,v2.s0", 
+            "shape" : [500,2000,600,2200],
+            "score" : 0.95
+        },
+        {
+            "id": 3,
+            "classID" : 18,
+            "className": "t6,v1.s0", 
+            "shape" : [1830,1740,1910,1840],
+            "score" : 0.99
+        }
+    ]
+    }
