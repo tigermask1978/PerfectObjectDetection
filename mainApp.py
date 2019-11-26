@@ -22,6 +22,59 @@ MSG_FINISHED = 'finished'
 # 配置窗口发送信号
 MSG_CONF_COMPLETED = 'completed'
 
+class singleDetection(object):
+    '''
+        单张检测类
+    '''
+    def __init__(self, inputRootImagePath=None, resultOutputPath=None):
+        # 单张检测图像根目录
+        self.inputRootImagePath = inputRootImagePath    
+        self.resultOutputPath = resultOutputPath 
+
+        # 获得输入目录的底层路径名
+        inputPath = Path(self.inputRootImagePath)
+        inputPath_parent = inputPath.parent
+        self.lastPathOfInputPath = inputPath.relative_to(inputPath_parent)
+
+    def detect(self, imgFileName):
+        filePath, fileName = os.path.split(imgFileName)
+        fileNameWithFullPath = Path(imgFileName).as_posix()
+        [all_results, const_time] = DN.detect(fileNameWithFullPath)
+        # 构造json文件内容
+        data = {}
+        data['imgFile'] = fileNameWithFullPath
+        data['shapes'] = []
+        shapeCount = all_results.shape[0]
+        for i in range(shapeCount):
+            shape = {}
+            shape['id'] = i + 1
+            shape['classID'] = int(all_results[i][5])
+            shape['className'] = str(all_results[i][5])
+            shape['shape'] = [
+                                int(all_results[i][0]),
+                                int(all_results[i][1]),
+                                int(all_results[i][2]),
+                                int(all_results[i][3]),
+                            ]
+            shape['score'] = all_results[i][4]
+
+            data['shapes'].append(shape)                    
+
+        #检测结果(json文件)存放目录 
+        structure = Path(self.resultOutputPath).joinpath(self.lastPathOfInputPath).joinpath(Path(filePath).as_posix()[len(Path(self.inputRootImagePath).as_posix())+1:])
+        # print(imgFileName)
+        # print(structure)
+        
+        # 创建目录
+        structure.mkdir(parents=True, exist_ok=True)
+        # 检测结果json文件
+        fName,ext = os.path.splitext(fileName)
+        jsonFileName = structure.joinpath(fName + '.json')
+        # 写入文件
+        with open(jsonFileName.as_posix(), 'w') as f:
+            json.dump(data, f)
+        
+
 class batchDetectionThread(QtCore.QThread):
     '''
         批量检测子进程
@@ -128,7 +181,7 @@ class batchDetectionThread(QtCore.QThread):
                     # 检测结果json文件
                     jsonFileName = structure.joinpath(fName + '.json')
                     # 写入文件
-                    with open(jsonFileName, 'w') as f:
+                    with open(jsonFileName.as_posix(), 'w') as f:
                         json.dump(data, f)
                                   
                     # time.sleep(0.1)
@@ -468,7 +521,9 @@ class ObjectDetectionMainWindow(QMainWindow):
         retCode = configWindow.exec()
         # print(retCode)
         self.conf.reloadIniFile(config.iniFile)  
-
+        # 清空当前界面
+        self.ui.imageView.loadPicFile('')
+        self.ui.listWidgetCropImages.clear()
         self.progressBar.reset()      
 
     def configSignalCompleted(self):
@@ -583,6 +638,7 @@ class ObjectDetectionMainWindow(QMainWindow):
 
             # 统计总数
             inputRootImagePath = self.conf.ConfigSectionMap('App')['inputrootimagepath']
+            resultOutputPath = self.conf.ConfigSectionMap('App')['outputrootresult']
             totalProgress = 0
             for root, dirs, files in os.walk(inputRootImagePath):
                 for fileName in files:
@@ -602,7 +658,10 @@ class ObjectDetectionMainWindow(QMainWindow):
             else:
                 # 设置进度条
                 self.progressBar.setMinimum(0)
-                self.progressBar.setMaximum(totalProgress)               
+                self.progressBar.setMaximum(totalProgress)  
+
+                self.SD = singleDetection(inputRootImagePath=inputRootImagePath,resultOutputPath=resultOutputPath)  
+                self.SD.detect(self.allImageFiles[0])           
                 
                 # 此处检测第一张
                 self.currentImgIndex = 0
@@ -775,7 +834,8 @@ class ObjectDetectionMainWindow(QMainWindow):
             else:
                 self.currentImgIndex += 1
                 # 检测下一张
-                time.sleep(0.1)
+                # time.sleep(0.1)
+                self.SD.detect(self.allImageFiles[self.currentImgIndex])
                 self.progressBar.setValue(self.progressBar.value() + 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[self.currentImgIndex])
             if self.currentImgIndex != 0:
@@ -807,7 +867,8 @@ class ObjectDetectionMainWindow(QMainWindow):
             else:
                 self.currentImgIndex -= 1
                 # 检测上一张
-                time.sleep(0.1)
+                # time.sleep(0.1)
+                self.SD.detect(self.allImageFiles[self.currentImgIndex])
                 self.progressBar.setValue(self.progressBar.value() - 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[self.currentImgIndex])
 
@@ -886,22 +947,16 @@ def checkCaffeEnv():
     '''
         检查系统caffe环境
         返回：0-没有问题  1-有问题 
-    '''
-    ret = 0
+    '''        
     try:
-        import caffe
-    except:
-        ret = 1
-    
-    try:
-        import sys
-        # sys.path.append(os.path.join(config.caffe_root,'python'))
+        import sys        
         sys.path.append(Path(config.caffe_root).joinpath('python').as_posix())
         import caffe
+        ret = 0
+        return ret
     except:
         ret = 1
-
-    return ret
+        return ret 
 
 def checkSysParams():
     '''

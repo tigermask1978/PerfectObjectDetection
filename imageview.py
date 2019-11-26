@@ -1,4 +1,5 @@
 import sys
+import os
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -214,11 +215,18 @@ class ImageView(QGraphicsView):
     def loadPicFile(self,picFile):
         '''
             加载图像
+            如果图像为空，则清除当前的pixmapItem,重新添加一个新的；
+            否则，通过当前pixmapItem加载图像
         '''
-        picName = picFile
-        pic = QPixmap(picName)
-        self.picFile = picName       
-        self.pixmapItem.setPixmap(pic)
+        if os.path.exists(picFile):
+            picName = picFile
+            pic = QPixmap(picName)
+            self.picFile = picName       
+            self.pixmapItem.setPixmap(pic)
+        else:
+            self.scene.clear()
+            self.pixmapItem = QGraphicsPixmapItem()      
+            self.scene.addItem(self.pixmapItem)
 
     def loadAnnoRects(self, annoRects):
         '''
