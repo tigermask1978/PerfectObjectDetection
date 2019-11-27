@@ -7,10 +7,12 @@ from PyQt5 import QtCore
 
 from mainWindow import *
 from configureWindow import *
+from brightnessAndContrastAdjustWindow import *
 import config
 from utils import ODConfig, DetectResult, DetectionNet
 import configparser
 import cv2
+import numpy as np
 from pathlib import Path
 import json
 
@@ -73,6 +75,8 @@ class singleDetection(object):
         # 写入文件
         with open(jsonFileName.as_posix(), 'w') as f:
             json.dump(data, f)
+
+        return jsonFileName.as_posix()
         
 
 class batchDetectionThread(QtCore.QThread):
@@ -255,9 +259,47 @@ class batchDetectionThread(QtCore.QThread):
         #     else:
         #         continue
         #     break      
-        
+
         #完成批量检测
         self.change_progress.emit(0, MSG_FINISHED, '')     
+
+
+class BrightnessAndContrastAdjustWindow(QDialog):
+    '''
+        亮度和对比度调整窗口
+    '''
+    # 图像调整发送信号,由主窗口处理
+    brightness_contrast_params_signal = QtCore.pyqtSignal(float, int)
+    def __init__(self):
+        super().__init__()
+
+        self.ui = Ui_DialogBrightnessAndContrastAdjust()
+        self.ui.setupUi(self)
+
+        self.initWindow()
+
+    def initWindow(self):
+        # 模态窗口
+        self.setWindowModality(QtCore.Qt.WindowModal)
+
+        # 事件
+        self.ui.pushButtonReset.clicked.connect(self.reset)
+        self.ui.pushButtonOK.clicked.connect(self.ok)
+
+    def reset(self):
+        self.ui.spinBoxBrightness.setValue(0)
+        self.ui.spinBoxContrast.setValue(0)
+        self.brightness_contrast_params_signal.emit(0.0, 0)
+
+    def ok(self):
+        # 调整参数  alpha:[1.0,3.0]  beta:[0-100]        
+        alpha =  1.0 + self.ui.spinBoxContrast.value() / 100
+        beta = self.ui.spinBoxBrightness.value()
+
+        self.brightness_contrast_params_signal.emit(alpha, beta)         
+     
+       
+
 
 class ConfigureWindow(QDialog):
     '''
@@ -461,6 +503,11 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.statusbar.addPermanentWidget(self.progressBar,0)  
         
 
+        # 图像调整窗口
+        self.brightnessAndContrastAdjustWindow = None
+        # 当前图像的QImage(用于还原调整)
+        self.oriQImage = None
+
         # 批量检测标志(True标识已经开始批量检测，开始按钮不是第一次点击)
         self.batchStart = False
         # 是否批量检测中
@@ -513,6 +560,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.actionStop.triggered.connect(self.stopDetection)
         self.ui.actionNext.triggered.connect(self.nextImage)  
         self.ui.actionPrev.triggered.connect(self.prevImage)
+        self.ui.actionImageAdjust.triggered.connect(self.brightnessAndContrastAdjust)
         # 调用系统的close事件(执行的是closeEvent)
         self.ui.actionExit.triggered.connect(self.close)
         # 裁剪小图的事件
@@ -570,6 +618,43 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.batchStart = False
         self.batchDetInRunning = False
         self.progressBar.reset()
+
+    def brightnessAndContrastAdjust(self):
+        '''
+            actionImageAdjust:图像调整界面
+        '''
+        if self.brightnessAndContrastAdjustWindow is None:
+            self.brightnessAndContrastAdjustWindow = BrightnessAndContrastAdjustWindow()
+            self.brightnessAndContrastAdjustWindow.brightness_contrast_params_signal.connect(self.imageAdjust)
+        self.brightnessAndContrastAdjustWindow.show()
+        
+    def imageAdjust(self, alpha, beta):
+        print('alpha:{}, beta:{}'.format(alpha, beta))
+        # 获取图像
+        # self.oriImage = self.ui.imageView.pixmapItem.pixmap().toImage()  
+        qImage = self.oriQImage.convertToFormat(QImage.Format.Format_RGB888)      
+        # 图像的np存储形式
+        width , height = qImage.size().width(), qImage.size().height()
+        ptr = qImage.bits()
+        ptr.setsize(height * width * 3)
+        img_np = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
+        # 调整，原理：IMG_out(i,j) = alpha*IMG_in(i,j) + beta       
+        new_image = np.zeros(img_np.shape, img_np.dtype)
+        new_image = cv2.convertScaleAbs(img_np, alpha=alpha, beta=beta)
+
+        # 转成QImage
+        # print(new_image.shape)
+        height, width, bytesPerComponent = new_image.shape
+        bytesPerLine = 3 * width
+        qImg = QImage(new_image.data, width, height, bytesPerLine,
+                       QImage.Format_RGB888)
+        qImg = qImg.rgbSwapped()        
+
+        self.ui.imageView.pixmapItem.setPixmap(QPixmap.fromImage(qImg))
+        
+        # cv2.imshow('img', img_np)
+        # cv2.waitKey()
+        # print(type(qImage))
 
     def configure(self):
         '''
@@ -723,16 +808,21 @@ class ObjectDetectionMainWindow(QMainWindow):
                 # 设置进度条
                 self.progressBar.setMinimum(0)
                 self.progressBar.setMaximum(totalProgress)  
-
-                self.SD = singleDetection(inputRootImagePath=inputRootImagePath,resultOutputPath=resultOutputPath)  
-                self.SD.detect(self.allImageFiles[0])           
-                
                 # 此处检测第一张
+                self.SD = singleDetection(inputRootImagePath=inputRootImagePath,resultOutputPath=resultOutputPath)  
+                resultJsonFile = self.SD.detect(self.allImageFiles[0])           
+                
+                
                 self.currentImgIndex = 0
-                time.sleep(1)
+                # time.sleep(1)
                 self.progressBar.setValue(1)
                 self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[0])
+
+                # 加载结果
+                self.loadDetectResult(resultJsonFile)
                 
+                # 设置QImage
+                self.oriQImage = self.ui.imageView.pixmapItem.pixmap().toImage()
             
 
 
@@ -817,6 +907,9 @@ class ObjectDetectionMainWindow(QMainWindow):
                 fName = self.loadDetectResult(self.allAnnoFiles[self.currentImgIndex])
                 self.progressBar.setValue(1)
                 self.ui.plainTextEditLog.appendPlainText(fName)
+
+                # 设置QImage
+                self.oriQImage = self.ui.imageView.pixmapItem.pixmap().toImage()
         else:
             pass          
 
@@ -905,9 +998,15 @@ class ObjectDetectionMainWindow(QMainWindow):
                 self.currentImgIndex += 1
                 # 检测下一张
                 # time.sleep(0.1)
-                self.SD.detect(self.allImageFiles[self.currentImgIndex])
+                resultJsonFile =  self.SD.detect(self.allImageFiles[self.currentImgIndex])
                 self.progressBar.setValue(self.progressBar.value() + 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[self.currentImgIndex])
+
+                # 加载结果
+                self.loadDetectResult(resultJsonFile)
+
+                # 设置QImage
+                self.oriQImage = self.ui.imageView.pixmapItem.pixmap().toImage()
             if self.currentImgIndex != 0:
                 self.ui.actionPrev.setEnabled(True)
         elif detectionMode == 2:  #加载检测结果
@@ -923,6 +1022,8 @@ class ObjectDetectionMainWindow(QMainWindow):
 
                 self.progressBar.setValue(self.progressBar.value() + 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
+                # 设置QImage
+                self.oriQImage = self.ui.imageView.pixmapItem.pixmap().toImage()
             if self.currentImgIndex != 0:
                 self.ui.actionPrev.setEnabled(True)
 
@@ -938,9 +1039,15 @@ class ObjectDetectionMainWindow(QMainWindow):
                 self.currentImgIndex -= 1
                 # 检测上一张
                 # time.sleep(0.1)
-                self.SD.detect(self.allImageFiles[self.currentImgIndex])
+                resultJsonFile = self.SD.detect(self.allImageFiles[self.currentImgIndex])
                 self.progressBar.setValue(self.progressBar.value() - 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[self.currentImgIndex])
+
+                # 加载结果
+                self.loadDetectResult(resultJsonFile)
+
+                # 设置QImage
+                self.oriQImage = self.ui.imageView.pixmapItem.pixmap().toImage()
 
             if self.currentImgIndex != totalFileCount - 1:
                 self.ui.actionNext.setEnabled(True)
@@ -957,6 +1064,9 @@ class ObjectDetectionMainWindow(QMainWindow):
 
                 self.progressBar.setValue(self.progressBar.value() - 1)
                 self.ui.plainTextEditLog.appendPlainText(self.allAnnoFiles[self.currentImgIndex])
+
+                # 设置QImage
+                self.oriQImage = self.ui.imageView.pixmapItem.pixmap().toImage()
 
             if self.currentImgIndex != totalFileCount - 1:
                 self.ui.actionNext.setEnabled(True)
