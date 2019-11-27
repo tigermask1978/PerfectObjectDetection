@@ -88,6 +88,11 @@ class batchDetectionThread(QtCore.QThread):
         self.inputRootImagePath = inputRootImagePath    
         self.resultOutputPath = resultOutputPath 
 
+        # 获得输入目录的底层路径名
+        inputPath = Path(self.inputRootImagePath)
+        inputPath_parent = inputPath.parent
+        self.lastPathOfInputPath = inputPath.relative_to(inputPath_parent)
+
         # 暂停、恢复
         self.sync = QtCore.QMutex()
         self.pauseCond = QtCore.QWaitCondition()
@@ -128,70 +133,129 @@ class batchDetectionThread(QtCore.QThread):
         self.isStop = True
         self.sync.unlock() 
 
-    def run(self):   
-        # 获得输入目录的底层路径名
-        inputPath = Path(self.inputRootImagePath)
-        inputPath_parent = inputPath.parent
-        lastPathOfInputPath = inputPath.relative_to(inputPath_parent)
-        for root, dirs, files in os.walk(self.inputRootImagePath):
-            for fileName in files:
-                self.sync.lock()
-                if self.isStop:
-                    print('stopped')
-                    self.stopCond.wait(self.sync)
-                    break
-                self.sync.unlock()
+    def run(self): 
+        for i in range(len(w.allImageFiles)):
+            self.sync.lock()
+            if self.isStop:
+                print('stopped')
+                self.stopCond.wait(self.sync)
+                break
+            self.sync.unlock()
 
-                self.sync.lock()          
-                if self.isPause:
-                    print('pausing ...')
-                    self.pauseCond.wait(self.sync)
-                self.sync.unlock()
+            self.sync.lock()          
+            if self.isPause:
+                print('pausing ...')
+                self.pauseCond.wait(self.sync)
+            self.sync.unlock()
 
-                if fileName[fileName.rfind('.'):].upper() == '.JPG':  
-                    fileNameWithFullPath = Path(root).joinpath(fileName).as_posix()                                     
-                    print(fileNameWithFullPath)
-                    # 进行检测,获得结果
-                    [all_results, const_time] = DN.detect(fileNameWithFullPath)
-                    # 构造json文件内容
-                    data = {}
-                    data['imgFile'] = fileNameWithFullPath
-                    data['shapes'] = []
-                    shapeCount = all_results.shape[0]
-                    for i in range(shapeCount):
-                        shape = {}
-                        shape['id'] = i + 1
-                        shape['classID'] = int(all_results[i][5])
-                        shape['className'] = str(all_results[i][5])
-                        shape['shape'] = [
-                                            int(all_results[i][0]),
-                                            int(all_results[i][1]),
-                                            int(all_results[i][2]),
-                                            int(all_results[i][3]),
-                                        ]
-                        shape['score'] = all_results[i][4]
+            w.currentImgIndex = i
 
-                        data['shapes'].append(shape)                    
+            imgFileName = w.allImageFiles[i]
+            filePath, fileName = os.path.split(imgFileName)
+            fileNameWithFullPath = Path(imgFileName).as_posix()
+            [all_results, const_time] = DN.detect(fileNameWithFullPath)
+            # 构造json文件内容
+            data = {}
+            data['imgFile'] = fileNameWithFullPath
+            data['shapes'] = []
+            shapeCount = all_results.shape[0]
+            for i in range(shapeCount):
+                shape = {}
+                shape['id'] = i + 1
+                shape['classID'] = int(all_results[i][5])
+                shape['className'] = str(all_results[i][5])
+                shape['shape'] = [
+                                    int(all_results[i][0]),
+                                    int(all_results[i][1]),
+                                    int(all_results[i][2]),
+                                    int(all_results[i][3]),
+                                ]
+                shape['score'] = all_results[i][4]
 
-                    fName,ext = os.path.splitext(fileName)  
-                    #检测结果(json文件)存放目录 
-                    structure = Path(self.resultOutputPath).joinpath(lastPathOfInputPath).joinpath(Path(root).as_posix()[len(Path(inputPath).as_posix())+1:])
-                    # 创建目录
-                    structure.mkdir(parents=True, exist_ok=True)
-                    # 检测结果json文件
-                    jsonFileName = structure.joinpath(fName + '.json')
-                    # 写入文件
-                    with open(jsonFileName.as_posix(), 'w') as f:
-                        json.dump(data, f)
+                data['shapes'].append(shape)                    
+
+            #检测结果(json文件)存放目录 
+            structure = Path(self.resultOutputPath).joinpath(self.lastPathOfInputPath).joinpath(Path(filePath).as_posix()[len(Path(self.inputRootImagePath).as_posix())+1:])
+            # print(imgFileName)
+            # print(structure)
+            
+            # 创建目录
+            structure.mkdir(parents=True, exist_ok=True)
+            # 检测结果json文件
+            fName,ext = os.path.splitext(fileName)
+            jsonFileName = structure.joinpath(fName + '.json')
+            # 写入文件
+            with open(jsonFileName.as_posix(), 'w') as f:
+                json.dump(data, f)
+
+            self.change_progress.emit(1, fileNameWithFullPath, jsonFileName.as_posix()) 
+        '''
+            下面的方式也可以实现批量检测，不能监测当前进度
+        '''
+        # # 获得输入目录的底层路径名
+        # inputPath = Path(self.inputRootImagePath)
+        # inputPath_parent = inputPath.parent
+        # lastPathOfInputPath = inputPath.relative_to(inputPath_parent)
+        # for root, dirs, files in os.walk(self.inputRootImagePath):
+        #     for fileName in files:
+        #         self.sync.lock()
+        #         if self.isStop:
+        #             print('stopped')
+        #             self.stopCond.wait(self.sync)
+        #             break
+        #         self.sync.unlock()
+
+        #         self.sync.lock()          
+        #         if self.isPause:
+        #             print('pausing ...')
+        #             self.pauseCond.wait(self.sync)
+        #         self.sync.unlock()
+
+        #         if fileName[fileName.rfind('.'):].upper() == '.JPG':  
+        #             fileNameWithFullPath = Path(root).joinpath(fileName).as_posix()                                     
+        #             print(fileNameWithFullPath)
+        #             # 进行检测,获得结果
+        #             [all_results, const_time] = DN.detect(fileNameWithFullPath)
+        #             # 构造json文件内容
+        #             data = {}
+        #             data['imgFile'] = fileNameWithFullPath
+        #             data['shapes'] = []
+        #             shapeCount = all_results.shape[0]
+        #             for i in range(shapeCount):
+        #                 shape = {}
+        #                 shape['id'] = i + 1
+        #                 shape['classID'] = int(all_results[i][5])
+        #                 shape['className'] = str(all_results[i][5])
+        #                 shape['shape'] = [
+        #                                     int(all_results[i][0]),
+        #                                     int(all_results[i][1]),
+        #                                     int(all_results[i][2]),
+        #                                     int(all_results[i][3]),
+        #                                 ]
+        #                 shape['score'] = all_results[i][4]
+
+        #                 data['shapes'].append(shape)                    
+
+        #             fName,ext = os.path.splitext(fileName)  
+        #             #检测结果(json文件)存放目录 
+        #             structure = Path(self.resultOutputPath).joinpath(lastPathOfInputPath).joinpath(Path(root).as_posix()[len(Path(inputPath).as_posix())+1:])
+        #             # 创建目录
+        #             structure.mkdir(parents=True, exist_ok=True)
+        #             # 检测结果json文件
+        #             jsonFileName = structure.joinpath(fName + '.json')
+        #             # 写入文件
+        #             with open(jsonFileName.as_posix(), 'w') as f:
+        #                 json.dump(data, f)
                                   
-                    # time.sleep(0.1)
-                    # fileNameWithFullPath = os.path.join(root, fileName)
+        #             # time.sleep(0.1)
+        #             # fileNameWithFullPath = os.path.join(root, fileName)
                     
-                    # 处理完一张，发送消息更新进度条和界面
-                    self.change_progress.emit(1, fileNameWithFullPath, jsonFileName.as_posix())  
-            else:
-                continue
-            break      
+        #             # 处理完一张，发送消息更新进度条和界面
+        #             self.change_progress.emit(1, fileNameWithFullPath, jsonFileName.as_posix())  
+        #     else:
+        #         continue
+        #     break      
+        
         #完成批量检测
         self.change_progress.emit(0, MSG_FINISHED, '')     
 
@@ -402,7 +466,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         # 是否批量检测中
         self.batchDetInRunning = False 
 
-        # 逐张检测
+        # 逐张检测和批量检测存放的所有图像列表
         self.allImageFiles = []
         # 加载结果
         self.allAnnoFiles = []
@@ -672,24 +736,14 @@ class ObjectDetectionMainWindow(QMainWindow):
             
 
 
-        elif detectionMode == 1 :  #批量检测
-            self.ui.actionStart.setEnabled(False)
-            self.ui.actionPause.setEnabled(True)
-            self.ui.actionStop.setEnabled(True)
-            self.ui.actionNext.setEnabled(False)
-            self.ui.actionPrev.setEnabled(False)
-            self.ui.actionRedo.setEnabled(False)
-            self.ui.actionImageAdjust.setEnabled(False)
-            self.ui.actionSetup.setEnabled(False)
-
-            self.batchDetInRunning = True
+        elif detectionMode == 1 :  #批量检测            
 
             if self.batchStart: #不是第一次点击，发送resume信号
                 # 发送继续信号
                 self.batchStart = True
                 self.batchDetectionSignal.emit(MSG_RESUME)                
             else: #第一次点击
-                self.batchStart = True
+                
                 self.ui.plainTextEditLog.clear()
                 # 统计总数
                 inputRootImagePath = self.conf.ConfigSectionMap('App')['inputrootimagepath']
@@ -698,15 +752,31 @@ class ObjectDetectionMainWindow(QMainWindow):
                 for root, dirs, files in os.walk(inputRootImagePath):
                     for fileName in files:
                         if fileName[fileName.rfind('.'):].upper() == '.JPG':
+                            self.allImageFiles.append(Path(root).joinpath(fileName).as_posix())
                             totalProgress +=1
-                # 设置进度条
-                self.progressBar.setMinimum(1)
-                self.progressBar.setMaximum(totalProgress)
-                # self.ui.statusbar.showMessage('批量检测...')
-                # 启动进程开始批量检测
-                t = batchDetectionThread(self,inputRootImagePath=inputRootImagePath, resultOutputPath=resultOutputPath)
-                t.change_progress.connect(self.changeProgress)
-                t.start()  
+
+                if totalProgress == 0:                    
+                    self.ui.statusbar.showMessage('目录下没有可检测的图像。') 
+                else:
+                    self.ui.actionStart.setEnabled(False)
+                    self.ui.actionPause.setEnabled(True)
+                    self.ui.actionStop.setEnabled(True)
+                    self.ui.actionNext.setEnabled(False)
+                    self.ui.actionPrev.setEnabled(False)
+                    self.ui.actionRedo.setEnabled(False)
+                    self.ui.actionImageAdjust.setEnabled(False)
+                    self.ui.actionSetup.setEnabled(False)
+
+                    self.batchDetInRunning = True
+                    self.batchStart = True
+                    # 设置进度条
+                    self.progressBar.setMinimum(1)
+                    self.progressBar.setMaximum(totalProgress)
+                    # self.ui.statusbar.showMessage('批量检测...')
+                    # 启动进程开始批量检测                    
+                    t = batchDetectionThread(self,inputRootImagePath=inputRootImagePath, resultOutputPath=resultOutputPath)
+                    t.change_progress.connect(self.changeProgress)
+                    t.start()  
                
         elif detectionMode == 2 :   #加载检测结果
             self.ui.actionStart.setEnabled(False)
