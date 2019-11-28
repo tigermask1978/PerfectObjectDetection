@@ -43,10 +43,13 @@
        <item>
         <widget class="QSlider" name="horizontalSliderBrightness">
          <property name="minimum">
-          <number>-100</number>
+          <number>0</number>
          </property>
          <property name="maximum">
-          <number>100</number>
+          <number>510</number>
+         </property>
+         <property name="value">
+          <number>255</number>
          </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
@@ -56,10 +59,13 @@
        <item>
         <widget class="QSpinBox" name="spinBoxBrightness">
          <property name="minimum">
-          <number>-100</number>
+          <number>0</number>
          </property>
          <property name="maximum">
-          <number>100</number>
+          <number>510</number>
+         </property>
+         <property name="value">
+          <number>255</number>
          </property>
         </widget>
        </item>
@@ -77,13 +83,13 @@
        <item>
         <widget class="QSlider" name="horizontalSliderContrast">
          <property name="minimum">
-          <number>-100</number>
+          <number>0</number>
          </property>
          <property name="maximum">
-          <number>200</number>
+          <number>254</number>
          </property>
          <property name="value">
-          <number>0</number>
+          <number>127</number>
          </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
@@ -93,10 +99,13 @@
        <item>
         <widget class="QSpinBox" name="spinBoxContrast">
          <property name="minimum">
-          <number>-100</number>
+          <number>0</number>
          </property>
          <property name="maximum">
-          <number>200</number>
+          <number>254</number>
+         </property>
+         <property name="value">
+          <number>127</number>
          </property>
         </widget>
        </item>

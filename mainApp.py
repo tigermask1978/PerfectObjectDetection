@@ -9,7 +9,7 @@ from mainWindow import *
 from configureWindow import *
 from brightnessAndContrastAdjustWindow import *
 import config
-from utils import ODConfig, DetectResult, DetectionNet
+from utils import ODConfig, DetectResult, DetectionNet, ImageAdjust
 import configparser
 import cv2
 import numpy as np
@@ -269,7 +269,7 @@ class BrightnessAndContrastAdjustWindow(QDialog):
         亮度和对比度调整窗口
     '''
     # 图像调整发送信号,由主窗口处理
-    brightness_contrast_params_signal = QtCore.pyqtSignal(float, int)
+    brightness_contrast_params_signal = QtCore.pyqtSignal(int, int)
     def __init__(self):
         super().__init__()
 
@@ -299,12 +299,12 @@ class BrightnessAndContrastAdjustWindow(QDialog):
         self.brightness_contrast_params_signal.emit(alpha, beta) 
 
     def reset(self):
-        self.ui.spinBoxBrightness.setValue(0)
-        self.ui.spinBoxContrast.setValue(0)
-        self.brightness_contrast_params_signal.emit(0.0, 0)
+        self.ui.spinBoxBrightness.setValue(255)
+        self.ui.spinBoxContrast.setValue(127)
+        self.brightness_contrast_params_signal.emit(127, 255)
 
     def ok(self):
-        # 调整参数  alpha:[0.,3.0]  beta:[-100,100]        
+        # 调整参数  alpha:[0,254]  beta:[0,510]        
         alpha =  self.ui.spinBoxContrast.value() 
         beta = self.ui.spinBoxBrightness.value()
 
@@ -519,6 +519,8 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.brightnessAndContrastAdjustWindow = None
         # 当前图像的QImage(用于还原调整)
         self.oriQImage = None
+        # 图像调整类
+        self.imageAdjustClass = None
 
         # 批量检测标志(True标识已经开始批量检测，开始按钮不是第一次点击)
         self.batchStart = False
@@ -641,7 +643,7 @@ class ObjectDetectionMainWindow(QMainWindow):
             self.brightnessAndContrastAdjustWindow.brightness_contrast_params_signal.connect(self.imageAdjust)
         self.brightnessAndContrastAdjustWindow.show()
         
-    def imageAdjust(self, alpha, beta):
+    def imageAdjust(self, alpha, beta):        
         # print('alpha:{}, beta:{}'.format(alpha, beta))
         # 获取图像
         # self.oriImage = self.ui.imageView.pixmapItem.pixmap().toImage()  
@@ -652,23 +654,29 @@ class ObjectDetectionMainWindow(QMainWindow):
         ptr.setsize(height * width * 3)
         img_np = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
         # 调整，原理：IMG_out(i,j) = (alpha)*IMG_in(i,j) + beta 
-        alpha =  1.0 + alpha / 100        
-        new_image = np.zeros(img_np.shape, img_np.dtype)
-        new_image = cv2.convertScaleAbs(img_np, alpha=alpha, beta=beta)
+        # alpha =  1.0 + alpha / 100        
+        # new_image = np.zeros(img_np.shape, img_np.dtype)
+        # new_image = cv2.convertScaleAbs(img_np, alpha=alpha, beta=beta)
+        if self.imageAdjustClass is None:
+            self.imageAdjustClass = ImageAdjust()
+        new_image = np.zeros(img_np.shape, img_np.dtype)        
+        new_image = self.imageAdjustClass.apply_brightness_contrast(img_np,beta,alpha)
+        
+        
 
         # 转成QImage
         # print(new_image.shape)
         height, width, bytesPerComponent = new_image.shape
         bytesPerLine = 3 * width
         qImg = QImage(new_image.data, width, height, bytesPerLine,
-                       QImage.Format_RGB888)
+                    QImage.Format_RGB888)
         qImg = qImg.rgbSwapped()        
 
         self.ui.imageView.pixmapItem.setPixmap(QPixmap.fromImage(qImg))
         
-        # cv2.imshow('img', img_np)
+        # cv2.imshow('img', new_image)
         # cv2.waitKey()
-        # print(type(qImage))
+  
 
     def configure(self):
         '''
