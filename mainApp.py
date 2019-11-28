@@ -286,6 +286,15 @@ class BrightnessAndContrastAdjustWindow(QDialog):
         self.ui.pushButtonReset.clicked.connect(self.reset)
         self.ui.pushButtonOK.clicked.connect(self.ok)
 
+        self.ui.spinBoxBrightness.valueChanged.connect(self.valueChanged)
+        self.ui.spinBoxContrast.valueChanged.connect(self.valueChanged)
+
+    def valueChanged(self):
+        alpha =  self.ui.spinBoxContrast.value() 
+        beta = self.ui.spinBoxBrightness.value()
+
+        self.brightness_contrast_params_signal.emit(alpha, beta) 
+
     def reset(self):
         self.ui.spinBoxBrightness.setValue(0)
         self.ui.spinBoxContrast.setValue(0)
@@ -293,7 +302,7 @@ class BrightnessAndContrastAdjustWindow(QDialog):
 
     def ok(self):
         # 调整参数  alpha:[1.0,3.0]  beta:[0-100]        
-        alpha =  1.0 + self.ui.spinBoxContrast.value() / 100
+        alpha =  self.ui.spinBoxContrast.value() 
         beta = self.ui.spinBoxBrightness.value()
 
         self.brightness_contrast_params_signal.emit(alpha, beta)         
@@ -560,6 +569,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.ui.actionStop.triggered.connect(self.stopDetection)
         self.ui.actionNext.triggered.connect(self.nextImage)  
         self.ui.actionPrev.triggered.connect(self.prevImage)
+        self.ui.actionRedo.triggered.connect(self.redetectImage)
         self.ui.actionImageAdjust.triggered.connect(self.brightnessAndContrastAdjust)
         # 调用系统的close事件(执行的是closeEvent)
         self.ui.actionExit.triggered.connect(self.close)
@@ -638,7 +648,8 @@ class ObjectDetectionMainWindow(QMainWindow):
         ptr = qImage.bits()
         ptr.setsize(height * width * 3)
         img_np = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
-        # 调整，原理：IMG_out(i,j) = alpha*IMG_in(i,j) + beta       
+        # 调整，原理：IMG_out(i,j) = (alpha)*IMG_in(i,j) + beta  
+        alpha =  1.0 + alpha / 100     
         new_image = np.zeros(img_np.shape, img_np.dtype)
         new_image = cv2.convertScaleAbs(img_np, alpha=alpha, beta=beta)
 
@@ -1071,6 +1082,23 @@ class ObjectDetectionMainWindow(QMainWindow):
             if self.currentImgIndex != totalFileCount - 1:
                 self.ui.actionNext.setEnabled(True)
 
+    def redetectImage(self):
+        '''
+            重新检测
+        '''
+        detectionMode = int(self.conf.ConfigSectionMap('App')['detectionmode'])
+        if detectionMode == 0:  #逐张检测
+            resultJsonFile = self.SD.detect(self.allImageFiles[self.currentImgIndex])            
+            self.ui.plainTextEditLog.appendPlainText(self.allImageFiles[self.currentImgIndex])
+
+            # 加载结果
+            self.loadDetectResult(resultJsonFile)
+
+            # 设置QImage
+            self.oriQImage = self.ui.imageView.pixmapItem.pixmap().toImage()
+            
+        else:
+            pass
 
     def loadDetectResult(self,annoFile):
         '''
