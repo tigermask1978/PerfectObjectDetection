@@ -282,6 +282,9 @@ class BrightnessAndContrastAdjustWindow(QDialog):
         # 模态窗口
         self.setWindowModality(QtCore.Qt.WindowModal)
 
+        # 不需要确定按钮了
+        self.ui.pushButtonOK.setVisible(False)
+
         # 事件
         self.ui.pushButtonReset.clicked.connect(self.reset)
         self.ui.pushButtonOK.clicked.connect(self.ok)
@@ -301,7 +304,7 @@ class BrightnessAndContrastAdjustWindow(QDialog):
         self.brightness_contrast_params_signal.emit(0.0, 0)
 
     def ok(self):
-        # 调整参数  alpha:[1.0,3.0]  beta:[0-100]        
+        # 调整参数  alpha:[0.,3.0]  beta:[-100,100]        
         alpha =  self.ui.spinBoxContrast.value() 
         beta = self.ui.spinBoxBrightness.value()
 
@@ -639,7 +642,7 @@ class ObjectDetectionMainWindow(QMainWindow):
         self.brightnessAndContrastAdjustWindow.show()
         
     def imageAdjust(self, alpha, beta):
-        print('alpha:{}, beta:{}'.format(alpha, beta))
+        # print('alpha:{}, beta:{}'.format(alpha, beta))
         # 获取图像
         # self.oriImage = self.ui.imageView.pixmapItem.pixmap().toImage()  
         qImage = self.oriQImage.convertToFormat(QImage.Format.Format_RGB888)      
@@ -648,8 +651,8 @@ class ObjectDetectionMainWindow(QMainWindow):
         ptr = qImage.bits()
         ptr.setsize(height * width * 3)
         img_np = np.frombuffer(ptr, np.uint8).reshape((height, width, 3))
-        # 调整，原理：IMG_out(i,j) = (alpha)*IMG_in(i,j) + beta  
-        alpha =  1.0 + alpha / 100     
+        # 调整，原理：IMG_out(i,j) = (alpha)*IMG_in(i,j) + beta 
+        alpha =  1.0 + alpha / 100        
         new_image = np.zeros(img_np.shape, img_np.dtype)
         new_image = cv2.convertScaleAbs(img_np, alpha=alpha, beta=beta)
 
